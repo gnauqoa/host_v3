@@ -23,6 +23,7 @@ LiquidCrystal_I2C lcd(0x27, 16, 2); // Địa chỉ I2C 0x27, màn hình 16x2
 // Thông tin Wi-Fi
 char ssid[] = "KHKT";      // Thay bằng SSID của bạn
 char pass[] = "123456789"; // Thay bằng mật khẩu Wi-Fi của bạn
+const char ENGINE_FAILURE_STATUS_STR[] = "engine_failure";
 
 bool relayOn = false;                // Biến trạng thái relay
 unsigned long lastEmergencyTime = 0; // Thời gian cứu nạn gần nhất
@@ -30,10 +31,10 @@ unsigned long relayTimeout = 30000;  // Thời gian khóa relay (5 phút = 30000
 bool relayLocked = false;            // Trạng thái khóa relay
 
 void initSystem(); // Hàm khởi tạo hệ thống
-void updateLCD(String senderId);
+void updateLCD(String line1, String line2, String line3, String line4);
 void processLoRaMessages(); // Hàm xử lý tin nhắn LoRa
 void handleRelayLogic();    // Hàm xử lý logic relay
-void sendAckMessage(const String &shipCode); // Hàm gửi phản hồi qua LoRa
+void sendAckMessage(const String &shipCode, float lat = 0, float lon = 0);
 
 void setup()
 {
@@ -89,61 +90,89 @@ void initSystem()
   Serial.println("Wi-Fi đã kết nối.");
 }
 // Hàm cập nhật LCD
-void updateLCD(String senderId)
+void updateLCD(String line1, String line2 = "", String line3 = "", String line4 = "")
 {
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("CUU NAN KHAN CAP!");
+  lcd.print(line1);
   lcd.setCursor(0, 1);
-  lcd.print("MA TAU: " + senderId);
+  lcd.print(line2);
+  lcd.setCursor(0, 2);
+  lcd.print(line3);
+  lcd.setCursor(0, 3);
+  lcd.print(line4);
 }
 // Hàm xử lý tin nhắn LoRa
 void processLoRaMessages()
 {
   int packetSize = LoRa.parsePacket();
-  if (packetSize)
+  if (packetSize > 0)
   {
-    String receivedMessage = "";
+    String incomingMessage = "";
     while (LoRa.available())
     {
-      receivedMessage += (char)LoRa.read(); // Đọc thông điệp từ LoRa
+      incomingMessage += (char)LoRa.read();
     }
-    Serial.println("Received Message: " + receivedMessage); // In thông điệp lên Serial Monitor
+    Serial.println("[INFO] Received message: " + incomingMessage);
 
-    // Kiểm tra nếu tin nhắn bắt đầu bằng "LORACUUNAN-"
-    if (receivedMessage.startsWith("LORACUUNAN"))
+    // Kiểm tra format tin nhắn mới: HELP-boatName-boatId-lat-long-internetStatus
+    if (incomingMessage.startsWith("HELP-"))
     {
-      // Gửi phản hồi
-      sendAckMessage("DAT_LIEN");
+      Serial.println("[INFO] SOS message detected!");
 
-      int separatorIndex1 = receivedMessage.indexOf("-");
-      if (separatorIndex1 != -1)
+      // Tách các phần của tin nhắn dựa vào dấu '-'
+      int firstDash = incomingMessage.indexOf("-");
+      int secondDash = incomingMessage.indexOf("-", firstDash + 1);
+      int thirdDash = incomingMessage.indexOf("-", secondDash + 1);
+      int fourthDash = incomingMessage.indexOf("-", thirdDash + 1);
+      int fifthDash = incomingMessage.indexOf("-", fourthDash + 1);
+      int sixthDash = incomingMessage.indexOf("-", fifthDash + 1);
+
+      if (firstDash == -1 || secondDash == -1 || thirdDash == -1 || fourthDash == -1 || fifthDash == -1 || sixthDash == -1)
       {
-        String senderId = receivedMessage.substring(separatorIndex1 + 1, 14); // Lấy mã định danh
-        if (senderId.length() > 0)
-        {
-          int separatorIndex2 = receivedMessage.indexOf("-", separatorIndex1 + 1);
-          if (separatorIndex2 != -1)
-          {
-            String url = receivedMessage.substring(separatorIndex2 + 1); // Lấy URL từ dấu "-" thứ hai
-            String message = "Cảnh báo cứu nạn khẩn cấp từ " + senderId + ". Vui lòng truy cập vào: " + url;
-            Blynk.logEvent("cuu_nan_khan_cap", message); // Gửi thông báo đến Blynk
-            Blynk.virtualWrite(V0, message);
-            updateLCD(senderId); // Cập nhật thông tin lên LCD
-            // Nếu relay không bị khóa, bật relay
-            if (!relayLocked)
-            {
-              digitalWrite(RELAY_PIN, HIGH); // Bật relay
-              relayOn = true;
-              Serial.println("BUZZ ON");
-            }
-            else
-            {
-              Serial.println("BUZZ is locked.");
-            }
-          }
-        }
+        Serial.println("[ERROR] Invalid message format.");
+        updateLCD("Tin nhan khong hop le");
+        return;
       }
+
+      // Trích xuất thông tin từ tin nhắn
+      const String boatName = incomingMessage.substring(firstDash + 1, secondDash);
+      const String boatId = incomingMessage.substring(secondDash + 1, thirdDash);
+      float shipLat = incomingMessage.substring(thirdDash + 1, fourthDash).toFloat();
+      float shipLon = incomingMessage.substring(fourthDash + 1, fifthDash).toFloat();
+      bool internetStatus = incomingMessage.substring(fifthDash + 1).toInt();
+      const String boatStatus = incomingMessage.substring(sixthDash + 1);
+
+      Serial.println("[INFO] Boat Name: " + boatName);
+      Serial.println("[INFO] Boat ID: " + boatId);
+      Serial.println("[INFO] Latitude: " + String(shipLat, 6));
+      Serial.println("[INFO] Longitude: " + String(shipLon, 6));
+      Serial.println("[INFO] Internet Status: " + String(internetStatus));
+      Serial.println("[INFO] Boat Status: " + boatStatus);
+
+      // Gửi tín hiệu xác nhận cứu hộ
+      sendAckMessage("DAT_LIEN");
+      const String googleMapsUrl = "https://www.google.com/maps/search/?api=1&query=" + String(shipLat, 6) + "," + String(shipLon, 6);
+      const String message = "Cảnh báo cứu nạn khẩn cấp từ " + boatId + ". Vui lòng truy cập vào: " + googleMapsUrl;
+      Blynk.logEvent("cuu_nan_khan_cap", message); // Gửi thông báo đến Blynk
+      Blynk.virtualWrite(V0, message);
+      updateLCD(boatName, "-" + boatStatus == ENGINE_FAILURE_STATUS_STR ? "hong dong co" : "chim");
+      // Nếu relay không bị khóa, bật relay
+      if (!relayLocked)
+      {
+        digitalWrite(RELAY_PIN, HIGH); // Bật relay
+        relayOn = true;
+        Serial.println("BUZZ ON");
+      }
+      else
+      {
+        Serial.println("BUZZ is locked.");
+      }
+    }
+    else
+    {
+      Serial.println("[INFO] Invalid message (Does not start with HELP-).");
+      updateLCD("Tin nhan khong hop le");
     }
   }
 }
@@ -194,12 +223,12 @@ void loop()
   handleRelayLogic();    // Xử lý logic relay
 }
 // Hàm gửi phản hồi qua LoRa
-void sendAckMessage(const String &shipCode)
+void sendAckMessage(const String &shipCode, float lat, float lon)
 {
-  String ackMessage = "DANHANCUUNAN_" + shipCode;
+  String ackMessage = "HELP_RES-" + shipCode + "-" + String(lat, 6) + "-" + String(lon, 6);
   LoRa.beginPacket();
   LoRa.print(ackMessage);
   LoRa.endPacket();
 
-  Serial.println("[INFO] Đã gửi phản hồi: " + ackMessage);
+  Serial.println("[INFO] Acknowledgment sent: " + ackMessage);
 }
