@@ -14,7 +14,7 @@
 #define SS 5         // Chân Chip Select (NSS)
 #define RST 14       // Chân Reset
 #define DIO0 2       // Chân DIO0
-#define RELAY_PIN 13 // Định nghĩa chân công tắc và relay
+#define RELAY_PIN 15 // Định nghĩa chân công tắc và relay
 
 // Định nghĩa LCD I2C
 LiquidCrystal_I2C lcd(0x27, 16, 2); // Địa chỉ I2C 0x27, màn hình 16x2
