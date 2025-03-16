@@ -46,7 +46,7 @@ void publish_mqtt(const char *topic, const char *message);
 
 void setup()
 {
-  Wire.begin(22, 21);
+  Wire.begin(21, 22);
   Serial.begin(9600); // Khởi tạo Serial Monitor
   initSystem();       // Khởi tạo hệ thống
   // Kết nối Wi-Fi và Blynk
@@ -216,12 +216,12 @@ void processLoRaMessages()
       Serial.println("[INFO] Boat Status: " + boatStatus);
 
       // Gửi tín hiệu xác nhận cứu hộ
-      sendAckMessage("DAT_LIEN");
+      sendAckMessage("HELP_RES-DAT_LIEN");
       const String googleMapsUrl = "https://www.google.com/maps/search/?api=1&query=" + String(shipLat, 6) + "," + String(shipLon, 6);
       const String message = "Cảnh báo cứu nạn khẩn cấp từ " + boatId + ". Vui lòng truy cập vào: " + googleMapsUrl;
       Blynk.logEvent("cuu_nan_khan_cap", message); // Gửi thông báo đến Blynk
       Blynk.virtualWrite(V0, message);
-      updateLCD(boatName, "-" + boatStatus == ENGINE_FAILURE_STATUS_STR ? "hong dong co" : "chim");
+      updateLCD(boatName + "-" + boatStatus == ENGINE_FAILURE_STATUS_STR ? "hong dong co" : "chim");
 
       if (!internetStatus)
       {
