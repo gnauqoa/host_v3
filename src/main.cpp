@@ -20,12 +20,12 @@
 LiquidCrystal_I2C lcd(0x27, 16, 2); // Địa chỉ I2C 0x27, màn hình 16x2
 WiFiClient espClient;
 PubSubClient client(espClient);
+IPAddress mqttServer(157, 230, 36, 116); // Không cần hostByName()
 
 // Thông tin Wi-Fi
 const char ssid[] = "KHKT";      // Thay bằng SSID của bạn
 const char pass[] = "123456789"; // Thay bằng mật khẩu Wi-Fi của bạn
 const char ENGINE_FAILURE_STATUS_STR[] = "engine_failure";
-const char mqtt_server[] = "http://157.230.36.116";
 const int mqtt_port = 1883; // Cổng MQTT
 
 bool relayOn = false;                // Biến trạng thái relay
@@ -36,7 +36,7 @@ unsigned long lastReconnectAttempt = 0;
 const long reconnectInterval = 5000; // Thời gian chờ reconnect (5 giây)
 
 void initSystem(); // Hàm khởi tạo hệ thống
-void updateLCD(String line1, String line2, String line3, String line4);
+void updateLCD(String line1, String line2);
 void processLoRaMessages(); // Hàm xử lý tin nhắn LoRa
 void handleRelayLogic();    // Hàm xử lý logic relay
 void sendAckMessage(const String &shipCode, float lat = 0, float lon = 0);
@@ -58,7 +58,7 @@ void setup()
   }
   Serial.println("Wi-Fi đã kết nối.");
   Blynk.virtualWrite(V0, ">> System is ready. Type OFF to disable relay.\n");
-  client.setServer(mqtt_server, mqtt_port); // Cấu hình MQTT server
+  client.setServer(mqttServer, mqtt_port); // Cấu hình MQTT server
 }
 
 void loop()
@@ -155,17 +155,13 @@ void initSystem()
   Serial.println("Wi-Fi đã kết nối.");
 }
 // Hàm cập nhật LCD
-void updateLCD(String line1, String line2 = "", String line3 = "", String line4 = "")
+void updateLCD(String line1, String line2 = "")
 {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(line1);
   lcd.setCursor(0, 1);
   lcd.print(line2);
-  lcd.setCursor(0, 2);
-  lcd.print(line3);
-  lcd.setCursor(0, 3);
-  lcd.print(line4);
 }
 // Hàm xử lý tin nhắn LoRa
 void processLoRaMessages()
@@ -216,12 +212,14 @@ void processLoRaMessages()
       Serial.println("[INFO] Boat Status: " + boatStatus);
 
       // Gửi tín hiệu xác nhận cứu hộ
-      sendAckMessage("HELP_RES-DAT_LIEN");
+      sendAckMessage("DAT_LIEN-0-0");
       const String googleMapsUrl = "https://www.google.com/maps/search/?api=1&query=" + String(shipLat, 6) + "," + String(shipLon, 6);
       const String message = "Cảnh báo cứu nạn khẩn cấp từ " + boatId + ". Vui lòng truy cập vào: " + googleMapsUrl;
       Blynk.logEvent("cuu_nan_khan_cap", message); // Gửi thông báo đến Blynk
       Blynk.virtualWrite(V0, message);
-      updateLCD(boatName + "-" + boatStatus == ENGINE_FAILURE_STATUS_STR ? "hong dong co" : "chim");
+      const String mes = boatName + " bi " + (boatStatus == ENGINE_FAILURE_STATUS_STR ? "hong dong co" : "chim");
+      updateLCD(mes, String(shipLat) + "," + String(shipLon));
+      Serial.println("Message: " + mes);
 
       if (!internetStatus)
       {
@@ -290,7 +288,7 @@ BLYNK_WRITE(V0)
 // Hàm gửi phản hồi qua LoRa
 void sendAckMessage(const String &shipCode, float lat, float lon)
 {
-  String ackMessage = "HELP_RES-" + shipCode + "-" + String(lat, 6) + "-" + String(lon, 6);
+  String ackMessage = "HELP_RES-" + shipCode + "-" + String(lat, 2) + "-" + String(lon, 2);
   LoRa.beginPacket();
   LoRa.print(ackMessage);
   LoRa.endPacket();
