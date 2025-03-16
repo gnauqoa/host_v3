@@ -214,7 +214,7 @@ void processLoRaMessages()
       // Gửi tín hiệu xác nhận cứu hộ
       sendAckMessage("DAT_LIEN-0-0");
       const String googleMapsUrl = "https://www.google.com/maps/search/?api=1&query=" + String(shipLat, 6) + "," + String(shipLon, 6);
-      const String message = "Cảnh báo cứu nạn khẩn cấp từ " + boatId + ". Vui lòng truy cập vào: " + googleMapsUrl;
+      const String message = "Cảnh báo cứu nạn khẩn cấp từ " + boatName + ". Vui lòng truy cập vào: " + googleMapsUrl;
       Blynk.logEvent("cuu_nan_khan_cap", message); // Gửi thông báo đến Blynk
       Blynk.virtualWrite(V0, message);
       const String mes = boatName + " bi " + (boatStatus == ENGINE_FAILURE_STATUS_STR ? "hong dong co" : "chim");
