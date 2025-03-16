@@ -8,33 +8,41 @@
 #include <BlynkSimpleEsp32.h>
 #include <SPI.h>
 #include <LoRa.h>
+#include <PubSubClient.h>
 
-// Định nghĩa chân LoRa
-#define SS 5   // Chân Chip Select (NSS)
-#define RST 14 // Chân Reset
-#define DIO0 2 // Chân DIO0
-// SPI.begin(18, 19, 23, 5) (SCK, MISO, MOSI, SS)
-// Định nghĩa chân công tắc và relay
-#define RELAY_PIN 13
+// Định nghĩa chân LoRa, SPI.begin(18, 19, 23, 5) (SCK, MISO, MOSI, SS)
+#define SS 5         // Chân Chip Select (NSS)
+#define RST 14       // Chân Reset
+#define DIO0 2       // Chân DIO0
+#define RELAY_PIN 13 // Định nghĩa chân công tắc và relay
 
 // Định nghĩa LCD I2C
 LiquidCrystal_I2C lcd(0x27, 16, 2); // Địa chỉ I2C 0x27, màn hình 16x2
+WiFiClient espClient;
+PubSubClient client(espClient);
 
 // Thông tin Wi-Fi
-char ssid[] = "KHKT";      // Thay bằng SSID của bạn
-char pass[] = "123456789"; // Thay bằng mật khẩu Wi-Fi của bạn
+const char ssid[] = "KHKT";      // Thay bằng SSID của bạn
+const char pass[] = "123456789"; // Thay bằng mật khẩu Wi-Fi của bạn
 const char ENGINE_FAILURE_STATUS_STR[] = "engine_failure";
+const char mqtt_server[] = "http://157.230.36.116";
+const int mqtt_port = 1883; // Cổng MQTT
 
 bool relayOn = false;                // Biến trạng thái relay
+bool relayLocked = false;            // Trạng thái khóa relay
 unsigned long lastEmergencyTime = 0; // Thời gian cứu nạn gần nhất
 unsigned long relayTimeout = 30000;  // Thời gian khóa relay (5 phút = 300000 ms)
-bool relayLocked = false;            // Trạng thái khóa relay
+unsigned long lastReconnectAttempt = 0;
+const long reconnectInterval = 5000; // Thời gian chờ reconnect (5 giây)
 
 void initSystem(); // Hàm khởi tạo hệ thống
 void updateLCD(String line1, String line2, String line3, String line4);
 void processLoRaMessages(); // Hàm xử lý tin nhắn LoRa
 void handleRelayLogic();    // Hàm xử lý logic relay
 void sendAckMessage(const String &shipCode, float lat = 0, float lon = 0);
+void reconnect_mqtt();
+const String generateDeviceData(const String status, const String deviceId, float gpsLat, float gpsLong);
+void publish_mqtt(const char *topic, const char *message);
 
 void setup()
 {
@@ -50,6 +58,63 @@ void setup()
   }
   Serial.println("Wi-Fi đã kết nối.");
   Blynk.virtualWrite(V0, ">> System is ready. Type OFF to disable relay.\n");
+  client.setServer(mqtt_server, mqtt_port); // Cấu hình MQTT server
+}
+
+void loop()
+{
+  Blynk.run();           // Cập nhật Blynk
+  processLoRaMessages(); // Xử lý tin nhắn LoRa
+  handleRelayLogic();    // Xử lý logic relay
+  if (!client.connected())
+  {
+    reconnect_mqtt();
+  }
+  client.loop();
+}
+
+const String generateDeviceData(const String status, const String deviceId, float gpsLat, float gpsLong)
+{
+  const String data = "{\"deviceId\":\"" + deviceId + "\",\"status\":\"" + status + "\",\"position\":{\"coordinates\":{\"lat\":" + String(gpsLat, 6) + ",\"lng\":" + String(gpsLong, 6) + "}}}";
+  return data;
+}
+
+void publish_mqtt(const char *topic, const char *message)
+{
+  if (client.connected())
+  {
+    Serial.print("📤 Đang gửi tin nhắn MQTT: ");
+    Serial.println(message);
+    client.publish(topic, message);
+  }
+  else
+  {
+    Serial.println("⚠️ Không thể gửi tin nhắn vì chưa kết nối MQTT");
+  }
+}
+
+void reconnect_mqtt()
+{
+  if (!client.connected())
+  {
+    unsigned long now = millis();
+    if (now - lastReconnectAttempt >= reconnectInterval)
+    {
+      lastReconnectAttempt = now;
+      Serial.println("🔄 Đang kết nối lại MQTT...");
+
+      if (client.connect("ESP32_Client"))
+      {
+        Serial.println("✅ MQTT Connected!");
+        client.subscribe("esp32/test");
+      }
+      else
+      {
+        Serial.print("⚠️ Kết nối thất bại, mã lỗi: ");
+        Serial.println(client.state());
+      }
+    }
+  }
 }
 // Hàm khởi tạo hệ thống
 void initSystem()
@@ -157,7 +222,13 @@ void processLoRaMessages()
       Blynk.logEvent("cuu_nan_khan_cap", message); // Gửi thông báo đến Blynk
       Blynk.virtualWrite(V0, message);
       updateLCD(boatName, "-" + boatStatus == ENGINE_FAILURE_STATUS_STR ? "hong dong co" : "chim");
-      // Nếu relay không bị khóa, bật relay
+
+      if (!internetStatus)
+      {
+        const String deviceData = generateDeviceData(boatStatus, boatId, shipLat, shipLon);
+        publish_mqtt("device/update", deviceData.c_str());
+      }
+
       if (!relayLocked)
       {
         digitalWrite(RELAY_PIN, HIGH); // Bật relay
@@ -216,12 +287,6 @@ BLYNK_WRITE(V0)
   }
 }
 
-void loop()
-{
-  Blynk.run();           // Cập nhật Blynk
-  processLoRaMessages(); // Xử lý tin nhắn LoRa
-  handleRelayLogic();    // Xử lý logic relay
-}
 // Hàm gửi phản hồi qua LoRa
 void sendAckMessage(const String &shipCode, float lat, float lon)
 {
