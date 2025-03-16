@@ -227,16 +227,11 @@ void processLoRaMessages()
         publish_mqtt("device/update", deviceData.c_str());
       }
 
-      if (!relayLocked)
-      {
+     
         digitalWrite(RELAY_PIN, HIGH); // Bật relay
         relayOn = true;
         Serial.println("BUZZ ON");
-      }
-      else
-      {
-        Serial.println("BUZZ is locked.");
-      }
+      
     }
     else
     {
@@ -267,7 +262,7 @@ BLYNK_WRITE(V0)
   {
     if (relayOn)
     {
-      digitalWrite(RELAY_PIN, LOW); // Tắt relay
+      // digitalWrite(RELAY_PIN, LOW); // Tắt relay
       relayOn = false;
       relayLocked = true;           // Khóa relay
       lastEmergencyTime = millis(); // Ghi nhận thời gian
