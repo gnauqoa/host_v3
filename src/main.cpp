@@ -20,7 +20,7 @@
 LiquidCrystal_I2C lcd(0x27, 16, 2); // Địa chỉ I2C 0x27, màn hình 16x2
 WiFiClient espClient;
 PubSubClient client(espClient);
-IPAddress mqttServer(157, 230, 36, 116); // Không cần hostByName()
+IPAddress mqttServer(167, 71, 221, 111); // Không cần hostByName()
 
 // Thông tin Wi-Fi
 const char ssid[] = "KHKT";      // Thay bằng SSID của bạn
@@ -227,11 +227,9 @@ void processLoRaMessages()
         publish_mqtt("device/update", deviceData.c_str());
       }
 
-     
-        digitalWrite(RELAY_PIN, HIGH); // Bật relay
-        relayOn = true;
-        Serial.println("BUZZ ON");
-      
+      digitalWrite(RELAY_PIN, HIGH); // Bật relay
+      relayOn = true;
+      Serial.println("BUZZ ON");
     }
     else
     {
