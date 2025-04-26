@@ -20,13 +20,16 @@
 LiquidCrystal_I2C lcd(0x27, 16, 2); // Địa chỉ I2C 0x27, màn hình 16x2
 WiFiClient espClient;
 PubSubClient client(espClient);
-IPAddress mqttServer(167, 71, 221, 111); // Không cần hostByName()
+// IPAddress mqttServer(167, 71, 221, 111); // Không cần hostByName()
+// const int mqttPort = 1883; // Cổng MQTT
+
+const char* mqttServer = "0.tcp.ap.ngrok.io"; // Mới
+const int mqttPort = 14223; // Cập nhật cổng mới
 
 // Thông tin Wi-Fi
 const char ssid[] = "KHKT";      // Thay bằng SSID của bạn
 const char pass[] = "123456789"; // Thay bằng mật khẩu Wi-Fi của bạn
 const char ENGINE_FAILURE_STATUS_STR[] = "engine_failure";
-const int mqtt_port = 1883; // Cổng MQTT
 
 bool relayOn = false;                // Biến trạng thái relay
 bool relayLocked = false;            // Trạng thái khóa relay
@@ -58,7 +61,7 @@ void setup()
   }
   Serial.println("Wi-Fi đã kết nối.");
   Blynk.virtualWrite(V0, ">> System is ready. Type OFF to disable relay.\n");
-  client.setServer(mqttServer, mqtt_port); // Cấu hình MQTT server
+  client.setServer(mqttServer, mqttPort); // Cấu hình MQTT server
 }
 
 void loop()
